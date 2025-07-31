@@ -115,25 +115,3 @@ E (49118) DHT11: Erro na leitura (Código: 5)
 ## Licença
 
 MIT License - Consulte o arquivo [LICENSE](LICENSE) para detalhes.
-```
-
----
-
-### Melhorias Sugeridas (To-Do)
-- [ ] Adicionar diagrama esquemático
-- [ ] Implementar OTA updates
-- [ ] Adicionar autenticação MQTT
-- [ ] Suporte à nuvem (AWS IoT/Azure)
-
-Este README fornece uma visão completa do projeto, incluindo:
-- Configuração técnica detalhada
-- Instruções de instalação
-- Estratégias de debug
-- Boas práticas implementadas
-- Roadmap de melhorias
-
-Você pode personalizar com:
-1. Imagens reais do projeto
-2. Vídeo de demonstração
-3. Exemplos de comandos MQTT
-4. Informações específicas do seu ambiente
