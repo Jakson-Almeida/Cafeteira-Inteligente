@@ -35,6 +35,8 @@ static bool heating = false;
 static bool scheduled = false;
 static char status_msg[16] = "Iniciando"; // Buffer para mensagens de status
 
+static int last_temp = -1, last_humidity = -1; // Variáveis estáticas para armazenar os últimos valores
+
 // Inicialização do display OLED
 void display_init(void) {
     i2c_master_init(&dev, SDA_GPIO, SCL_GPIO, RESET_GPIO);
@@ -120,12 +122,15 @@ void coffee_control_task(void *params) {
         // Leitura do sensor DHT11
         struct dht11_reading data = DHT11_read();
         if (data.status == DHT11_OK) {
-            temperature = data.temperature;
-            humidity = data.humidity;
-            
-            // Publica dados via MQTT
-            snprintf(msg, sizeof(msg), "{\"temp\":%d,\"umi\":%d}", temperature, humidity);
-            mqtt_publish("cafeteira/sensor", msg);
+            // Publica apenas se os valores mudaram
+            if (data.temperature != last_temp || data.humidity != last_humidity) {
+                temperature = data.temperature;
+                humidity = data.humidity;
+                snprintf(msg, sizeof(msg), "{\"temp\":%d,\"umi\":%d}", temperature, humidity);
+                mqtt_publish("cafeteira/sensor", msg);
+                last_temp = temperature;
+                last_humidity = humidity;
+            }
         }
 
         // Controle do botão manual
@@ -144,7 +149,7 @@ void coffee_control_task(void *params) {
             xSemaphoreGive(displayMutex);
         }
 
-        vTaskDelay(pdMS_TO_TICKS(1000)); // Atualiza a cada 1 segundo
+        vTaskDelay(pdMS_TO_TICKS(2000)); // Atualiza a cada 2 segundo
     }
 }
 
