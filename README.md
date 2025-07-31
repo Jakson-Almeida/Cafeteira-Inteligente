@@ -1,7 +1,7 @@
 
 # Cafeteira Inteligente com ESP32
 
-![Diagrama do Projeto](https://example.com/cafeteira-diagram.png) **(Adicionar imagem real posteriormente)***
+![Diagrama do Projeto](cafeteira-diagram.jpg)
 
 Projeto de uma cafeteira controlada via WiFi/MQTT com monitoramento de temperatura e umidade, acionamento remoto e display OLED integrado.
 
