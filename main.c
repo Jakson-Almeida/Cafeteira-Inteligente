@@ -27,6 +27,8 @@
 SemaphoreHandle_t wificonnectedSemaphore;
 SemaphoreHandle_t mqttconnectedSemaphore;
 SemaphoreHandle_t displayMutex;
+static SemaphoreHandle_t buttonSemaphore;
+static volatile bool buttonPressed = false; // 'volatile' para acesso seguro entre ISR e task
 
 SSD1306_t dev;
 static int temperature = 0;
@@ -36,6 +38,19 @@ static bool scheduled = false;
 static char status_msg[16] = "Iniciando"; // Buffer para mensagens de status
 
 static int last_temp = -1, last_humidity = -1; // Variáveis estáticas para armazenar os últimos valores
+
+// Interrupcao
+void IRAM_ATTR button_isr_handler(void* arg) {
+    static uint32_t lastInterruptTime = 0;
+    uint32_t now = xTaskGetTickCountFromISR();
+    
+    // Debounce de 50ms (ajuste conforme necessário)
+    if ((now - lastInterruptTime) > pdMS_TO_TICKS(50)) {
+        buttonPressed = true;
+        xSemaphoreGiveFromISR(buttonSemaphore, NULL); // Notifica a task
+    }
+    lastInterruptTime = now;
+}
 
 // Inicialização do display OLED
 void display_init(void) {
@@ -108,11 +123,34 @@ void wifiConnected(void *params) {
     }
 }
 
+// Tarefa Botao
+void button_task(void* arg) {
+    while(1) {
+        if(xSemaphoreTake(buttonSemaphore, portMAX_DELAY) == pdTRUE) {
+            if(buttonPressed) {
+                buttonPressed = false;
+                
+                // Lógica segura do botão
+                heating = !heating;
+                gpio_set_level(RELAY_PIN, heating ? 1 : 0);
+                
+                // Atualiza display (com mutex)
+                if(xSemaphoreTake(displayMutex, pdMS_TO_TICKS(100))) {
+                    snprintf(status_msg, sizeof(status_msg), "Manual:%s", heating ? "ON" : "OFF");
+                    update_display();
+                    xSemaphoreGive(displayMutex);
+                }
+                
+                // Publica via MQTT (não bloqueante)
+                mqtt_publish("cafeteira/aquecimento", heating ? "ligar" : "desligar");
+            }
+        }
+    }
+}
+
 // Tarefa: Controle principal da cafeteira
 void coffee_control_task(void *params) {
     char msg[50];
-    bool last_button_state = false;
-    bool current_button_state;
 
     xSemaphoreTake(mqttconnectedSemaphore, portMAX_DELAY);
     mqtt_sbscribe("cafeteira/aquecimento");
@@ -133,17 +171,6 @@ void coffee_control_task(void *params) {
             }
         }
 
-        // Controle do botão manual
-        current_button_state = gpio_get_level(BUTTON_PIN);
-        ESP_LOGI("DEBUGA_BOTAO", "State %d", current_button_state);
-        if (!current_button_state && last_button_state) {
-            heating = !heating;
-            gpio_set_level(RELAY_PIN, heating ? 1 : 0);
-            snprintf(status_msg, sizeof(status_msg), "Manual:%s", heating ? "ON" : "OFF");
-            mqtt_publish("cafeteira/aquecimento", heating ? "ligar" : "desligar");
-        }
-        last_button_state = current_button_state;
-
         // Atualiza display
         if (xSemaphoreTake(displayMutex, pdMS_TO_TICKS(1000))) {
             update_display();
@@ -160,9 +187,15 @@ void app_main(void) {
     
     // Configuração dos GPIOs
     gpio_set_direction(RELAY_PIN, GPIO_MODE_OUTPUT);
-    gpio_set_direction(BUTTON_PIN, GPIO_MODE_INPUT);
-    gpio_set_pull_mode(BUTTON_PIN, GPIO_PULLUP_ONLY);
     gpio_set_level(RELAY_PIN, 0); // Inicia com relé desligado
+    gpio_config_t io_conf = {
+        .pin_bit_mask = (1ULL << BUTTON_PIN),
+        .mode = GPIO_MODE_INPUT,
+        .pull_up_en = GPIO_PULLUP_ENABLE,
+        .pull_down_en = GPIO_PULLDOWN_DISABLE,
+        .intr_type = GPIO_INTR_NEGEDGE // Detecta borda de descida (botão pressionado)
+    };
+    gpio_config(&io_conf);
 
     // Inicialização dos periféricos
     DHT11_init(DHT_PIN);
@@ -176,11 +209,17 @@ void app_main(void) {
     // Criação dos semáforos
     wificonnectedSemaphore = xSemaphoreCreateBinary();
     mqttconnectedSemaphore = xSemaphoreCreateBinary();
+    buttonSemaphore = xSemaphoreCreateBinary();
 
     // Inicia conexão WiFi
     wifi_start();
 
+    // Instala serviço de interrupção
+    gpio_install_isr_service(ESP_INTR_FLAG_LEVEL1); // Prioridade 1
+    gpio_isr_handler_add(BUTTON_PIN, button_isr_handler, NULL);
+
     // Criação das tarefas
+    xTaskCreate(button_task, "button_task", 2048, NULL, 5, NULL);       
+    xTaskCreate(coffee_control_task, "control", 4096, NULL, 3, NULL);   
     xTaskCreate(wifiConnected, "wifi_mqtt", 4096, NULL, 2, NULL);
-    xTaskCreate(coffee_control_task, "control", 4096, NULL, 3, NULL);
 }
