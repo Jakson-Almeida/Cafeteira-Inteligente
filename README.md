@@ -1,4 +1,3 @@
-
 # Cafeteira Inteligente com ESP32
 
 ![Diagrama do Projeto](cafeteira-diagram.jpg)
@@ -26,7 +25,7 @@ Projeto de uma cafeteira controlada via WiFi/MQTT com monitoramento de temperatu
 | Relé             | GPIO2     | Controle da resistência |
 | Botão            | GPIO3     | Acionamento manual      |
 
-##Configuração MQTT
+## Configuração MQTT
 
 ### Tópicos
 | Tópico                     | Direção   | Formato                 | Descrição               |
