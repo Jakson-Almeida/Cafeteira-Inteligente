@@ -135,6 +135,7 @@ void coffee_control_task(void *params) {
 
         // Controle do botão manual
         current_button_state = gpio_get_level(BUTTON_PIN);
+        ESP_LOGI("DEBUGA_BOTAO", "State %d", current_button_state);
         if (!current_button_state && last_button_state) {
             heating = !heating;
             gpio_set_level(RELAY_PIN, heating ? 1 : 0);
