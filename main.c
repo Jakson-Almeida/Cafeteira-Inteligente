@@ -14,6 +14,7 @@
 #include "mqtt.h"
 #include "dht11.h"
 #include "ssd1306.h"
+#include "mqtt_handler.h"
 
 // Definição dos pinos
 #define RELAY_PIN 2          // Pino para controle do relé (aquecimento)
@@ -38,6 +39,10 @@ static bool scheduled = false;
 static char status_msg[16] = "Iniciando"; // Buffer para mensagens de status
 
 static int last_temp = -1, last_humidity = -1; // Variáveis estáticas para armazenar os últimos valores
+
+void mqtt_data_handler(const char* topic, const char* data) {
+    mqtt_event_handler_cb(topic, data); // Usa a função existente
+}
 
 // Interrupcao
 void IRAM_ATTR button_isr_handler(void* arg) {
@@ -119,6 +124,7 @@ void wifiConnected(void *params) {
     while (1) {
         if (xSemaphoreTake(wificonnectedSemaphore, portMAX_DELAY)) {
             mqtt_start();
+            mqtt_set_callback(mqtt_data_handler);
         }
     }
 }
@@ -136,7 +142,7 @@ void button_task(void* arg) {
                 
                 // Atualiza display (com mutex)
                 if(xSemaphoreTake(displayMutex, pdMS_TO_TICKS(100))) {
-                    snprintf(status_msg, sizeof(status_msg), "Manual:%s", heating ? "ON" : "OFF");
+                    snprintf(status_msg, sizeof(status_msg), "Aq:%s", heating ? "ON" : "OFF");
                     update_display();
                     xSemaphoreGive(displayMutex);
                 }
@@ -175,6 +181,7 @@ void coffee_control_task(void *params) {
         if (xSemaphoreTake(displayMutex, pdMS_TO_TICKS(1000))) {
             update_display();
             xSemaphoreGive(displayMutex);
+            // ESP_LOGI("TASK_CONTROL", "Display atualizado");
         }
 
         vTaskDelay(pdMS_TO_TICKS(2000)); // Atualiza a cada 2 segundo
